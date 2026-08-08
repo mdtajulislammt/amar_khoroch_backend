@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(uuid())
+  name         String
+  email        String       @unique
+  passwordHash String       @map("password_hash")
+  phone        String?
+  role         String       @default("Pro Member")
+  avatar       String?
+  currency     String       @default("BDT (৳)")
+  bio          String?
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  appSetting   AppSetting?
+  wallets      Wallet[]
+  categories   Category[]
+  transactions Transaction[]
+  budgets      Budget[]
+  savingGoals  SavingGoal[]
+  debts        Debt[]
+  notes        Note[]
+
+  @@map("users")
+}
+
+model AppSetting {
+  id             String   @id @default(uuid())
+  userId         String   @unique @map("user_id")
+  isPinEnabled   Boolean  @default(false) @map("is_pin_enabled")
+  pinCodeHash    String?  @map("pin_code_hash")
+  activeWalletId String?  @map("active_wallet_id")
+  language       String   @default("en")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("app_settings")
+}
+
+enum WalletType {
+  CASH
+  BANK
+  MOBILE_BANKING
+}
+
+model Wallet {
+  id        String     @id @default(uuid())
+  userId    String     @map("user_id")
+  name      String
+  type      WalletType @default(CASH)
+  balance   Float      @default(0)
+  icon      String     @default("Wallet")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactionsFrom Transaction[]   @relation("SourceWallet")
+  transactionsTo   Transaction[]   @relation("TargetWallet")
+  savingHistories  SavingHistory[]
+
+  @@index([userId])
+  @@map("wallets")
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+model Category {
+  id        String       @id @default(uuid())
+  userId    String       @map("user_id")
+  name      String
+  type      CategoryType
+  icon      String
+  color     String
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@index([userId, type])
+  @@map("categories")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model Transaction {
+  id                String               @id @default(uuid())
+  userId            String               @map("user_id")
+  type              TransactionType
+  amount            Float
+  walletId          String               @map("wallet_id")
+  toWalletId        String?              @map("to_wallet_id")
+  categoryId        String?              @map("category_id")
+  date              String
+  note              String?
+  isRecurring       Boolean              @default(false) @map("is_recurring")
+  frequency         RecurrenceFrequency?
+  nextExecutionDate String?              @map("next_execution_date")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet     Wallet    @relation("SourceWallet", fields: [walletId], references: [id], onDelete: Cascade)
+  toWallet   Wallet?   @relation("TargetWallet", fields: [toWalletId], references: [id], onDelete: SetNull)
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId, date])
+  @@index([userId, walletId])
+  @@index([userId, categoryId])
+  @@map("transactions")
+}
+
+enum BudgetPeriod {
+  MONTHLY
+  WEEKLY
+}
+
+model Budget {
+  id          String       @id @default(uuid())
+  userId      String       @map("user_id")
+  categoryId  String       @map("category_id")
+  limitAmount Float        @map("limit_amount")
+  period      BudgetPeriod @default(MONTHLY)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId, period])
+  @@map("budgets")
+}
+
+model SavingGoal {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  goalName      String   @map("goal_name")
+  targetAmount  Float    @map("target_amount")
+  currentAmount Float    @default(0) @map("current_amount")
+  targetDate    String?  @map("target_date")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  histories SavingHistory[]
+
+  @@index([userId])
+  @@map("saving_goals")
+}
+
+model SavingHistory {
+  id        String   @id @default(uuid())
+  savingId  String   @map("saving_id")
+  walletId  String   @map("wallet_id")
+  amount    Float
+  date      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  savingGoal SavingGoal @relation(fields: [savingId], references: [id], onDelete: Cascade)
+  wallet     Wallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([savingId])
+  @@index([walletId])
+  @@map("saving_histories")
+}
+
+enum DebtType {
+  GIVEN
+  TAKEN
+}
+
+model Debt {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  personName String   @map("person_name")
+  type       DebtType
+  amount     Float
+  dueDate    String?  @map("due_date")
+  isCleared  Boolean  @default(false) @map("is_cleared")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("debts")
+}
+
+model Note {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  title       String
+  content     String?
+  isCompleted Boolean  @default(false) @map("is_completed")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notes")
+}
