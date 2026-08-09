@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsNumber, IsString, IsEnum, Min, Matches } from 'class-validator';
+import { IsOptional, IsNumber, IsString, IsEnum, IsBoolean, Min, Matches } from 'class-validator';
 import { DebtType } from '@prisma/client';
 
 export class UpdateDebtDto {
@@ -24,4 +24,14 @@ export class UpdateDebtDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Due date must be formatted as YYYY-MM-DD' })
   dueDate?: string;
+
+  @ApiPropertyOptional({ example: 'wallet-uuid', description: 'Wallet ID associated with debt' })
+  @IsOptional()
+  @IsString()
+  walletId?: string;
+
+  @ApiPropertyOptional({ example: false, description: 'Is debt cleared/settled' })
+  @IsOptional()
+  @IsBoolean()
+  isCleared?: boolean;
 }

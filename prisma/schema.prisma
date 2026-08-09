@@ -37,6 +37,7 @@ model AppSetting {
   userId         String   @unique @map("user_id")
   isPinEnabled   Boolean  @default(false) @map("is_pin_enabled")
   pinCodeHash    String?  @map("pin_code_hash")
+  autoLockHours  Int      @default(1) @map("auto_lock_hours")
   activeWalletId String?  @map("active_wallet_id")
   language       String   @default("en")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -68,6 +69,7 @@ model Wallet {
   transactionsFrom Transaction[]   @relation("SourceWallet")
   transactionsTo   Transaction[]   @relation("TargetWallet")
   savingHistories  SavingHistory[]
+  debts            Debt[]
 
   @@index([userId])
   @@map("wallets")
@@ -198,6 +200,7 @@ enum DebtType {
 model Debt {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
+  walletId   String?  @map("wallet_id")
   personName String   @map("person_name")
   type       DebtType
   amount     Float
@@ -206,7 +209,8 @@ model Debt {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet Wallet? @relation(fields: [walletId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@map("debts")

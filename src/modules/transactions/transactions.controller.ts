@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
@@ -55,6 +55,23 @@ export class TransactionsController {
     const data = await this.transactionsService.createTransaction(userId, dto);
     return {
       message: 'Transaction added successfully',
+      data,
+    };
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update Transaction', description: 'Update an existing transaction record.' })
+  @ApiParam({ name: 'id', description: 'Transaction ID' })
+  @ApiResponse({ status: 200, description: 'Transaction updated successfully' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  async updateTransaction(
+    @CurrentUser('id') userId: string,
+    @Param('id') transactionId: string,
+    @Body() dto: CreateTransactionDto,
+  ) {
+    const data = await this.transactionsService.updateTransaction(userId, transactionId, dto);
+    return {
+      message: 'Transaction updated successfully',
       data,
     };
   }

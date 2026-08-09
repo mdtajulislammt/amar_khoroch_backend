@@ -26,14 +26,17 @@ export class SettingsService {
         data: {
           userId,
           language: 'en',
+          autoLockHours: 1,
         },
       });
     }
 
     const data = {
       isPinEnabled: settings.isPinEnabled,
+      autoLockHours: settings.autoLockHours ?? 1,
       activeWalletId: settings.activeWalletId,
       language: settings.language,
+      hasPin: !!settings.pinCodeHash,
     };
 
     await this.redisService.set(cacheKey, data, 300);
@@ -41,24 +44,35 @@ export class SettingsService {
   }
 
   async updateSettings(userId: string, dto: UpdateSettingsDto) {
+    const existing = await this.prisma.appSetting.findUnique({ where: { userId } });
+    if (dto.isPinEnabled === true && (!existing || !existing.pinCodeHash)) {
+      throw new BadRequestException('Please set a security PIN first');
+    }
+
     const settings = await this.prisma.appSetting.upsert({
       where: { userId },
       update: {
         ...(dto.activeWalletId !== undefined && { activeWalletId: dto.activeWalletId }),
         ...(dto.language && { language: dto.language }),
+        ...(dto.isPinEnabled !== undefined && { isPinEnabled: dto.isPinEnabled }),
+        ...(dto.autoLockHours !== undefined && { autoLockHours: dto.autoLockHours }),
       },
       create: {
         userId,
         activeWalletId: dto.activeWalletId || null,
         language: dto.language || 'en',
+        isPinEnabled: dto.isPinEnabled || false,
+        autoLockHours: dto.autoLockHours ?? 1,
       },
     });
 
     await this.redisService.del(`user:${userId}:settings`);
     return {
       isPinEnabled: settings.isPinEnabled,
+      autoLockHours: settings.autoLockHours ?? 1,
       activeWalletId: settings.activeWalletId,
       language: settings.language,
+      hasPin: !!settings.pinCodeHash,
     };
   }
 

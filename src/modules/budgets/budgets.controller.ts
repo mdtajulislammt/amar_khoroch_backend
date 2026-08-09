@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { BudgetsService } from './budgets.service';
 import { CreateBudgetDto } from './dto/create-budget.dto';
@@ -33,6 +33,22 @@ export class BudgetsController {
     const data = await this.budgetsService.createBudget(userId, dto);
     return {
       message: 'Budget created successfully',
+      data,
+    };
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update Budget', description: 'Update a spending limit budget for a category.' })
+  @ApiParam({ name: 'id', description: 'Budget ID' })
+  @ApiResponse({ status: 200, description: 'Budget updated successfully' })
+  async updateBudget(
+    @CurrentUser('id') userId: string,
+    @Param('id') budgetId: string,
+    @Body() dto: CreateBudgetDto,
+  ) {
+    const data = await this.budgetsService.updateBudget(userId, budgetId, dto);
+    return {
+      message: 'Budget updated successfully',
       data,
     };
   }

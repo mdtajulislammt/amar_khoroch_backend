@@ -110,6 +110,47 @@ export class BudgetsService {
     };
   }
 
+  async updateBudget(userId: string, budgetId: string, dto: CreateBudgetDto) {
+    const budget = await this.prisma.budget.findFirst({
+      where: { id: budgetId, userId },
+    });
+
+    if (!budget) {
+      throw new NotFoundException('Budget not found');
+    }
+
+    const category = await this.prisma.category.findFirst({
+      where: { id: dto.categoryId, userId },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Category not found');
+    }
+
+    const updated = await this.prisma.budget.update({
+      where: { id: budgetId },
+      data: {
+        categoryId: dto.categoryId,
+        limitAmount: dto.limitAmount,
+        period: dto.period,
+      },
+      include: {
+        category: {
+          select: { name: true },
+        },
+      },
+    });
+
+    return {
+      id: updated.id,
+      categoryId: updated.categoryId,
+      categoryName: updated.category.name,
+      limitAmount: updated.limitAmount,
+      spentAmount: 0,
+      period: updated.period,
+    };
+  }
+
   async deleteBudget(userId: string, budgetId: string) {
     const budget = await this.prisma.budget.findFirst({
       where: { id: budgetId, userId },

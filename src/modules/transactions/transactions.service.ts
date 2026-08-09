@@ -208,6 +208,95 @@ export class TransactionsService {
     });
   }
 
+  async updateTransaction(userId: string, transactionId: string, dto: CreateTransactionDto) {
+    return await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: { id: transactionId, userId },
+      });
+
+      if (!existing) {
+        throw new NotFoundException('Transaction not found');
+      }
+
+      // 1. Revert previous wallet balance impact
+      if (existing.type === TransactionType.INCOME) {
+        await tx.wallet.update({
+          where: { id: existing.walletId },
+          data: { balance: { decrement: existing.amount } },
+        });
+      } else if (existing.type === TransactionType.EXPENSE) {
+        await tx.wallet.update({
+          where: { id: existing.walletId },
+          data: { balance: { increment: existing.amount } },
+        });
+      } else if (existing.type === TransactionType.TRANSFER && existing.toWalletId) {
+        await tx.wallet.update({
+          where: { id: existing.walletId },
+          data: { balance: { increment: existing.amount } },
+        });
+        await tx.wallet.update({
+          where: { id: existing.toWalletId },
+          data: { balance: { decrement: existing.amount } },
+        });
+      }
+
+      // 2. Apply new wallet balance impact
+      if (dto.type === TransactionType.INCOME) {
+        await tx.wallet.update({
+          where: { id: dto.walletId },
+          data: { balance: { increment: dto.amount } },
+        });
+      } else if (dto.type === TransactionType.EXPENSE) {
+        await tx.wallet.update({
+          where: { id: dto.walletId },
+          data: { balance: { decrement: dto.amount } },
+        });
+      } else if (dto.type === TransactionType.TRANSFER && dto.toWalletId) {
+        await tx.wallet.update({
+          where: { id: dto.walletId },
+          data: { balance: { decrement: dto.amount } },
+        });
+        await tx.wallet.update({
+          where: { id: dto.toWalletId },
+          data: { balance: { increment: dto.amount } },
+        });
+      }
+
+      // 3. Update the transaction record
+      const updated = await tx.transaction.update({
+        where: { id: transactionId },
+        data: {
+          type: dto.type,
+          amount: dto.amount,
+          walletId: dto.walletId,
+          toWalletId: dto.toWalletId || null,
+          categoryId: dto.categoryId || null,
+          date: dto.date,
+          note: dto.note || null,
+          isRecurring: dto.isRecurring || false,
+          frequency: dto.isRecurring ? dto.frequency : null,
+          nextExecutionDate: dto.isRecurring ? dto.nextExecutionDate : null,
+        },
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          categoryId: true,
+          walletId: true,
+          toWalletId: true,
+          date: true,
+          note: true,
+          isRecurring: true,
+          frequency: true,
+          nextExecutionDate: true,
+        },
+      });
+
+      await this.redisService.invalidateUserCache(userId);
+      return updated;
+    });
+  }
+
   async deleteTransaction(userId: string, transactionId: string) {
     return await this.prisma.$transaction(async (tx) => {
       const transaction = await tx.transaction.findFirst({
