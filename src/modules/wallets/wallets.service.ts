@@ -33,26 +33,66 @@ export class WalletsService {
   }
 
   async createWallet(userId: string, dto: CreateWalletDto) {
-    const wallet = await this.prisma.wallet.create({
-      data: {
-        userId,
-        name: dto.name,
-        type: dto.type,
-        balance: dto.balance,
-        icon: dto.icon,
-      },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        balance: true,
-        icon: true,
-      },
-    });
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Create the wallet
+      const wallet = await tx.wallet.create({
+        data: {
+          userId,
+          name: dto.name,
+          type: dto.type,
+          balance: dto.balance,
+          icon: dto.icon,
+        },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          balance: true,
+          icon: true,
+        },
+      });
 
-    await this.redisService.del(`user:${userId}:wallets`);
-    await this.redisService.del(`user:${userId}:summary`);
-    return wallet;
+      // 2. If initial balance > 0, auto-create an INCOME transaction
+      if (dto.balance && dto.balance > 0) {
+        // Find or create a special "Initial Balance" income category
+        let initCategory = await tx.category.findFirst({
+          where: { userId, name: 'Initial Balance', type: 'INCOME' },
+        });
+
+        if (!initCategory) {
+          initCategory = await tx.category.create({
+            data: {
+              userId,
+              name: 'Initial Balance',
+              type: 'INCOME',
+              icon: 'Wallet',
+              color: '#22c55e',
+            },
+          });
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        await tx.transaction.create({
+          data: {
+            userId,
+            type: 'INCOME',
+            amount: dto.balance,
+            walletId: wallet.id,
+            categoryId: initCategory.id,
+            date: today,
+            note: `${dto.name} - প্রাথমিক ব্যালেন্স`,
+            isRecurring: false,
+          },
+        });
+      }
+
+      await this.redisService.del(`user:${userId}:wallets`);
+      await this.redisService.del(`user:${userId}:summary`);
+      await this.redisService.del(`user:${userId}:transactions`);
+      await this.redisService.del(`user:${userId}:categories`);
+
+      return wallet;
+    });
   }
 
   async updateWallet(userId: string, walletId: string, dto: UpdateWalletDto) {

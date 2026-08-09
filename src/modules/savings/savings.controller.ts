@@ -14,6 +14,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 export class SavingsController {
   constructor(private readonly savingsService: SavingsService) {}
 
+  // ─── Static routes FIRST (before parameterized :id routes) ───────────────
+
   @Get()
   @ApiOperation({ summary: 'Get Saving Goals', description: 'Retrieve all savings goals created by the user.' })
   @ApiResponse({ status: 200, description: 'Saving goals retrieved successfully' })
@@ -38,6 +40,41 @@ export class SavingsController {
       data,
     };
   }
+
+  // IMPORTANT: 'history' static routes must come BEFORE ':id' parameterized routes
+  // Otherwise NestJS will match 'history' as an :id parameter value
+
+  @Get('history')
+  @ApiOperation({ summary: 'Get Saving Deposit History', description: 'Retrieve deposit history for savings goals.' })
+  @ApiQuery({ name: 'savingId', required: false, description: 'Filter history by specific goal ID' })
+  @ApiResponse({ status: 200, description: 'Saving history retrieved successfully' })
+  async getSavingHistory(
+    @CurrentUser('id') userId: string,
+    @Query('savingId') savingId?: string,
+  ) {
+    const data = await this.savingsService.getSavingHistory(userId, savingId);
+    return {
+      message: 'Saving history retrieved successfully',
+      data,
+    };
+  }
+
+  @Delete('history/:historyId')
+  @ApiOperation({ summary: 'Delete Saving History Item', description: 'Delete a deposit history item and refund balance to wallet.' })
+  @ApiParam({ name: 'historyId', description: 'Saving History Item ID' })
+  @ApiResponse({ status: 200, description: 'Deposit record deleted successfully' })
+  async deleteSavingHistory(
+    @CurrentUser('id') userId: string,
+    @Param('historyId') historyId: string,
+  ) {
+    const data = await this.savingsService.deleteSavingHistory(userId, historyId);
+    return {
+      message: data.message,
+      data: null,
+    };
+  }
+
+  // ─── Parameterized :id routes AFTER static routes ─────────────────────────
 
   @Put(':id')
   @ApiOperation({ summary: 'Update Saving Goal', description: 'Update goal name, target amount, or target date by ID.' })
@@ -84,37 +121,13 @@ export class SavingsController {
     const data = await this.savingsService.depositSavingGoal(userId, goalId, dto);
     return {
       message: 'Deposit successful',
-      data: data.goal,
-    };
-  }
-
-  @Get('history')
-  @ApiOperation({ summary: 'Get Saving Deposit History', description: 'Retrieve deposit history for savings goals.' })
-  @ApiQuery({ name: 'savingId', required: false, description: 'Filter history by specific goal ID' })
-  @ApiResponse({ status: 200, description: 'Saving history retrieved successfully' })
-  async getSavingHistory(
-    @CurrentUser('id') userId: string,
-    @Query('savingId') savingId?: string,
-  ) {
-    const data = await this.savingsService.getSavingHistory(userId, savingId);
-    return {
-      message: 'Saving history retrieved successfully',
-      data,
-    };
-  }
-
-  @Delete('history/:historyId')
-  @ApiOperation({ summary: 'Delete Saving History Item', description: 'Delete a deposit history item and refund balance to wallet.' })
-  @ApiParam({ name: 'historyId', description: 'Saving History Item ID' })
-  @ApiResponse({ status: 200, description: 'Deposit record deleted successfully' })
-  async deleteSavingHistory(
-    @CurrentUser('id') userId: string,
-    @Param('historyId') historyId: string,
-  ) {
-    const data = await this.savingsService.deleteSavingHistory(userId, historyId);
-    return {
-      message: data.message,
-      data: null,
+      data: {
+        id: data.goal.id,
+        goalName: data.goal.goalName,
+        targetAmount: data.goal.targetAmount,
+        currentAmount: data.goal.currentAmount,
+        targetDate: data.goal.targetDate,
+      },
     };
   }
 }
