@@ -110,6 +110,7 @@ export class WalletsService {
         ...(dto.name && { name: dto.name }),
         ...(dto.type && { type: dto.type }),
         ...(dto.icon && { icon: dto.icon }),
+        ...(dto.balance !== undefined && { balance: dto.balance }),
       },
       select: {
         id: true,
@@ -120,7 +121,7 @@ export class WalletsService {
       },
     });
 
-    await this.redisService.del(`user:${userId}:wallets`);
+    await this.redisService.invalidateUserCache(userId);
     return updated;
   }
 
@@ -137,8 +138,7 @@ export class WalletsService {
       where: { id: walletId },
     });
 
-    await this.redisService.del(`user:${userId}:wallets`);
-    await this.redisService.del(`user:${userId}:summary`);
+    await this.redisService.invalidateUserCache(userId);
     return { message: 'Wallet deleted successfully' };
   }
 }

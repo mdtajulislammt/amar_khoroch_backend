@@ -329,6 +329,46 @@ export class TransactionsService {
         });
       }
 
+      // Sync with parent Debts when deleting a transaction
+      if (transaction.note.startsWith('[DEBT_INIT:')) {
+        const endBracketIdx = transaction.note.indexOf(']');
+        if (endBracketIdx !== -1) {
+          const debtId = transaction.note.substring(11, endBracketIdx);
+          const debt = await tx.debt.findFirst({
+            where: { id: debtId, userId },
+          });
+          if (debt) {
+            // Delete associated clearance transactions
+            await tx.transaction.deleteMany({
+              where: {
+                userId,
+                id: { not: transactionId },
+                note: { startsWith: `[DEBT_CLEAR:${debtId}]` },
+              },
+            });
+            // Delete debt record
+            await tx.debt.delete({
+              where: { id: debtId },
+            });
+          }
+        }
+      } else if (transaction.note.startsWith('[DEBT_CLEAR:')) {
+        const endBracketIdx = transaction.note.indexOf(']');
+        if (endBracketIdx !== -1) {
+          const debtId = transaction.note.substring(12, endBracketIdx);
+          const debt = await tx.debt.findFirst({
+            where: { id: debtId, userId },
+          });
+          if (debt) {
+            // Mark debt as uncleared
+            await tx.debt.update({
+              where: { id: debtId },
+              data: { isCleared: false },
+            });
+          }
+        }
+      }
+
       await tx.transaction.delete({
         where: { id: transactionId },
       });

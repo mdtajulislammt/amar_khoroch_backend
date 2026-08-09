@@ -3,10 +3,14 @@ import { PrismaService } from '../../database/prisma.service';
 import { CreateDebtDto } from './dto/create-debt.dto';
 import { UpdateDebtDto } from './dto/update-debt.dto';
 import { DebtType, TransactionType } from '@prisma/client';
+import { RedisService } from '../../common/redis/redis.service';
 
 @Injectable()
 export class DebtsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redisService: RedisService,
+  ) {}
 
   private async getOrCreateDebtCategory(tx: any, userId: string, type: 'INCOME' | 'EXPENSE') {
     let category = await tx.category.findFirst({
@@ -82,9 +86,9 @@ export class DebtsService {
 
         // 1. Create automatic Transaction
         const today = new Date().toISOString().slice(0, 10);
-        const noteText = isGiven
+        const noteText = `[DEBT_INIT:${debt.id}] ` + (isGiven
           ? `${dto.personName}-কে ধার দেওয়া হয়েছে`
-          : `${dto.personName}-এর কাছ থেকে ধার নেওয়া হয়েছে`;
+          : `${dto.personName}-এর কাছ থেকে ধার নেওয়া হয়েছে`);
 
         await tx.transaction.create({
           data: {
@@ -106,6 +110,7 @@ export class DebtsService {
         });
       }
 
+      await this.redisService.invalidateUserCache(userId);
       return debt;
     });
   }
@@ -161,6 +166,46 @@ export class DebtsService {
         });
       }
 
+      // Sync auto-created initial and clearance transactions
+      if (updated.walletId) {
+        const isGiven = updated.type === DebtType.GIVEN;
+        const catType = isGiven ? 'EXPENSE' : 'INCOME';
+        const category = await this.getOrCreateDebtCategory(tx, userId, catType);
+
+        await tx.transaction.updateMany({
+          where: {
+            userId,
+            note: { startsWith: `[DEBT_INIT:${debtId}]` },
+          },
+          data: {
+            amount: updated.amount,
+            walletId: updated.walletId,
+            categoryId: category.id,
+            type: isGiven ? TransactionType.EXPENSE : TransactionType.INCOME,
+            note: `[DEBT_INIT:${debtId}] ${isGiven ? `${updated.personName}-কে ধার দেওয়া হয়েছে` : `${updated.personName}-এর কাছ থেকে ধার নেওয়া হয়েছে`}`,
+          },
+        });
+
+        if (updated.isCleared) {
+          const clearCatType = isGiven ? 'INCOME' : 'EXPENSE';
+          const clearCategory = await this.getOrCreateDebtCategory(tx, userId, clearCatType);
+          await tx.transaction.updateMany({
+            where: {
+              userId,
+              note: { startsWith: `[DEBT_CLEAR:${debtId}]` },
+            },
+            data: {
+              amount: updated.amount,
+              walletId: updated.walletId,
+              categoryId: clearCategory.id,
+              type: isGiven ? TransactionType.INCOME : TransactionType.EXPENSE,
+              note: `[DEBT_CLEAR:${debtId}] ${isGiven ? `${updated.personName}-এর পাওনা পরিশোধিত (ফেরত)` : `${updated.personName}-এর দেনা পরিশোধিত`}`,
+            },
+          });
+        }
+      }
+
+      await this.redisService.invalidateUserCache(userId);
       return updated;
     });
   }
@@ -204,9 +249,9 @@ export class DebtsService {
           const catType = isGiven ? 'INCOME' : 'EXPENSE';
           const category = await this.getOrCreateDebtCategory(tx, userId, catType);
           const today = new Date().toISOString().slice(0, 10);
-          const noteText = isGiven
+          const noteText = `[DEBT_CLEAR:${debt.id}] ` + (isGiven
             ? `${debt.personName}-এর পাওনা পরিশোধিত (ফেরত)`
-            : `${debt.personName}-এর দেনা পরিশোধিত`;
+            : `${debt.personName}-এর দেনা পরিশোধিত`);
 
           await tx.transaction.create({
             data: {
@@ -221,6 +266,14 @@ export class DebtsService {
           });
         } else {
           balanceChange = debt.type === DebtType.GIVEN ? -debt.amount : debt.amount;
+
+          // Delete repayment transaction
+          await tx.transaction.deleteMany({
+            where: {
+              userId,
+              note: { startsWith: `[DEBT_CLEAR:${debtId}]` },
+            },
+          });
         }
 
         await tx.wallet.update({
@@ -229,6 +282,7 @@ export class DebtsService {
         });
       }
 
+      await this.redisService.invalidateUserCache(userId);
       return updated;
     });
   }
@@ -252,11 +306,23 @@ export class DebtsService {
         });
       }
 
+      // Delete associated transactions
+      await tx.transaction.deleteMany({
+        where: {
+          userId,
+          OR: [
+            { note: { startsWith: `[DEBT_INIT:${debtId}]` } },
+            { note: { startsWith: `[DEBT_CLEAR:${debtId}]` } },
+          ],
+        },
+      });
+
       await tx.debt.delete({
         where: { id: debtId },
       });
 
-      return { message: 'Debt record deleted successfully' };
+      await this.redisService.invalidateUserCache(userId);
+      return { message: 'Debt record and associated transactions deleted successfully' };
     });
   }
 }
