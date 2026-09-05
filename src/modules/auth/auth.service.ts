@@ -5,6 +5,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
@@ -105,6 +106,84 @@ export class AuthService {
 
     return {
       token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        avatar: user.avatar,
+        currency: user.currency,
+        joinedDate: user.createdAt.toISOString().split('T')[0],
+      },
+    };
+  }
+
+  async googleAuth(dto: GoogleAuthDto) {
+    const email = dto.email.toLowerCase();
+    let user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      isNewUser = true;
+      // Register new user via Google
+      const randomPasswordHash = await bcrypt.hash(Math.random().toString(36), 10);
+      user = await this.prisma.$transaction(async (tx) => {
+        const newUser = await tx.user.create({
+          data: {
+            name: dto.name,
+            email,
+            passwordHash: randomPasswordHash,
+            avatar: dto.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+            role: 'Pro Member',
+          },
+        });
+
+        // Default App Settings & Default Wallet
+        const defaultWallet = await tx.wallet.create({
+          data: {
+            userId: newUser.id,
+            name: 'Cash Wallet',
+            type: 'CASH',
+            balance: 0,
+            icon: 'Wallet',
+          },
+        });
+
+        await tx.appSetting.create({
+          data: {
+            userId: newUser.id,
+            activeWalletId: defaultWallet.id,
+            language: 'en',
+          },
+        });
+
+        // Default Categories
+        await tx.category.createMany({
+          data: [
+            { userId: newUser.id, name: 'Food & Dining', type: 'EXPENSE', icon: 'UtensilsCrossed', color: '#38bdf8' },
+            { userId: newUser.id, name: 'Transportation', type: 'EXPENSE', icon: 'Bus', color: '#f59e0b' },
+            { userId: newUser.id, name: 'Salary & Income', type: 'INCOME', icon: 'Briefcase', color: '#22c55e' },
+          ],
+        });
+
+        return newUser;
+      });
+    } else if (dto.avatar && !user.avatar) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { avatar: dto.avatar },
+      });
+    }
+
+    const token = this.jwtService.sign({ sub: user.id, email: user.email });
+
+    return {
+      token,
+      isNewUser,
       user: {
         id: user.id,
         name: user.name,
