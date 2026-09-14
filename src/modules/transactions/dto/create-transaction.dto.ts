@@ -45,14 +45,20 @@ export class CreateTransactionDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Date must be formatted as YYYY-MM-DD' })
   date: string;
 
+  @ApiPropertyOptional({ example: '10:30 AM', description: 'Transaction time' })
+  @IsOptional()
+  @IsString()
+  time?: string;
+
   @ApiPropertyOptional({ example: 'Weekly Grocery Shopping', description: 'Note or description' })
   @IsOptional()
   @IsString()
   note?: string;
 
-  @ApiProperty({ example: false, description: 'Whether transaction is recurring' })
+  @ApiPropertyOptional({ example: false, description: 'Whether transaction is recurring' })
+  @IsOptional()
   @IsBoolean()
-  isRecurring: boolean;
+  isRecurring?: boolean;
 
   @ApiPropertyOptional({ example: 'MONTHLY', enum: RecurrenceFrequency, description: 'Recurrence frequency (DAILY, WEEKLY, MONTHLY)' })
   @ValidateIf((o) => o.isRecurring === true)

@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../database/prisma.service';
@@ -16,6 +21,62 @@ export class AuthService {
     private jwtService: JwtService,
     private redisService: RedisService,
   ) {}
+
+  private async initializeUserDefaults(tx: any, userId: string) {
+    // Default Wallets
+    const defaultWallet = await tx.wallet.create({
+      data: {
+        userId,
+        name: 'Cash Wallet',
+        type: 'CASH',
+        balance: 0,
+        icon: 'Wallet',
+      },
+    });
+
+    await tx.wallet.createMany({
+      data: [
+        {
+          userId,
+          name: 'Bank Account',
+          type: 'BANK',
+          balance: 0,
+          icon: 'Landmark',
+        },
+        {
+          userId,
+          name: 'bKash',
+          type: 'MOBILE_BANKING',
+          balance: 0,
+          icon: 'Smartphone',
+        },
+      ],
+    });
+
+    // Default App Settings
+    await tx.appSetting.create({
+      data: {
+        userId,
+        activeWalletId: defaultWallet.id,
+        language: 'bn',
+      },
+    });
+
+    // Default Categories
+    await tx.category.createMany({
+      data: [
+        { userId, name: 'Food & Dining', type: 'EXPENSE', icon: 'UtensilsCrossed', color: '#38bdf8' },
+        { userId, name: 'House Rent', type: 'EXPENSE', icon: 'Home', color: '#6366f1' },
+        { userId, name: 'Transportation', type: 'EXPENSE', icon: 'Bus', color: '#0ea5e9' },
+        { userId, name: 'Shopping', type: 'EXPENSE', icon: 'ShoppingBag', color: '#8b5cf6' },
+        { userId, name: 'Bills & Utilities', type: 'EXPENSE', icon: 'Receipt', color: '#64748b' },
+        { userId, name: 'Salary & Income', type: 'INCOME', icon: 'Briefcase', color: '#22c55e' },
+        { userId, name: 'Freelancing', type: 'INCOME', icon: 'Laptop', color: '#14b8a6' },
+      ],
+    });
+
+    return defaultWallet;
+  }
 
   async register(dto: RegisterDto) {
     const existingUser = await this.prisma.user.findUnique({
@@ -40,34 +101,7 @@ export class AuthService {
         },
       });
 
-      // Default App Settings & Default Wallet
-      const defaultWallet = await tx.wallet.create({
-        data: {
-          userId: newUser.id,
-          name: 'Cash Wallet',
-          type: 'CASH',
-          balance: 0,
-          icon: 'Wallet',
-        },
-      });
-
-      await tx.appSetting.create({
-        data: {
-          userId: newUser.id,
-          activeWalletId: defaultWallet.id,
-          language: 'en',
-        },
-      });
-
-      // Default Categories
-      await tx.category.createMany({
-        data: [
-          { userId: newUser.id, name: 'Food & Dining', type: 'EXPENSE', icon: 'UtensilsCrossed', color: '#38bdf8' },
-          { userId: newUser.id, name: 'Transportation', type: 'EXPENSE', icon: 'Bus', color: '#f59e0b' },
-          { userId: newUser.id, name: 'Salary & Income', type: 'INCOME', icon: 'Briefcase', color: '#22c55e' },
-        ],
-      });
-
+      await this.initializeUserDefaults(tx, newUser.id);
       return newUser;
     });
 
@@ -129,7 +163,6 @@ export class AuthService {
 
     if (!user) {
       isNewUser = true;
-      // Register new user via Google
       const randomPasswordHash = await bcrypt.hash(Math.random().toString(36), 10);
       user = await this.prisma.$transaction(async (tx) => {
         const newUser = await tx.user.create({
@@ -142,34 +175,7 @@ export class AuthService {
           },
         });
 
-        // Default App Settings & Default Wallet
-        const defaultWallet = await tx.wallet.create({
-          data: {
-            userId: newUser.id,
-            name: 'Cash Wallet',
-            type: 'CASH',
-            balance: 0,
-            icon: 'Wallet',
-          },
-        });
-
-        await tx.appSetting.create({
-          data: {
-            userId: newUser.id,
-            activeWalletId: defaultWallet.id,
-            language: 'en',
-          },
-        });
-
-        // Default Categories
-        await tx.category.createMany({
-          data: [
-            { userId: newUser.id, name: 'Food & Dining', type: 'EXPENSE', icon: 'UtensilsCrossed', color: '#38bdf8' },
-            { userId: newUser.id, name: 'Transportation', type: 'EXPENSE', icon: 'Bus', color: '#f59e0b' },
-            { userId: newUser.id, name: 'Salary & Income', type: 'INCOME', icon: 'Briefcase', color: '#22c55e' },
-          ],
-        });
-
+        await this.initializeUserDefaults(tx, newUser.id);
         return newUser;
       });
     } else if (dto.avatar && !user.avatar) {

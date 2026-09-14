@@ -27,6 +27,7 @@ export class NotesService {
         userId,
         title: dto.title,
         content: dto.content || null,
+        isCompleted: dto.isCompleted ?? false,
       },
       select: {
         id: true,
