@@ -8,6 +8,9 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
   HttpCode,
   HttpStatus,
   Res,
@@ -15,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminService } from './admin.service';
 import { BackupService } from './backup.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -211,6 +215,28 @@ export class AdminController {
     }
     return res.download(filePath, filename);
   }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('backup/restore')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Restore Database Backup', description: 'Upload a .zip or .sql backup file to restore database state.' })
+  async restoreBackup(
+    @UploadedFile() file: any,
+    @CurrentUser('email') adminEmail: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Please provide a backup file (.zip or .sql) to restore');
+    }
+    const result = await this.backupService.restoreDatabaseBackup(file, adminEmail);
+    return {
+      success: true,
+      message: result.message,
+      data: result.data,
+    };
+  }
+
 
   // --- Cache & Telemetry ---
 

@@ -6,12 +6,13 @@ import Redis from 'ioredis';
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: Redis;
   private readonly logger = new Logger(RedisService.name);
+  private memoryFallback = new Map<string, { value: any; expiresAt?: number }>();
 
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
     const host = this.configService.get<string>('REDIS_HOST', 'localhost');
-    const port = this.configService.get<number>('REDIS_PORT', 6379);
+    const port = Number(this.configService.get('REDIS_PORT')) || 6379;
     const password = this.configService.get<string>('REDIS_PASSWORD', '');
 
     this.client = new Redis({
@@ -41,16 +42,29 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async get<T>(key: string): Promise<T | null> {
     try {
-      if (!this.client || this.client.status !== 'ready') return null;
-      const data = await this.client.get(key);
-      return data ? JSON.parse(data) : null;
+      if (this.client && this.client.status === 'ready') {
+        const data = await this.client.get(key);
+        if (data) return JSON.parse(data);
+      }
     } catch (error) {
       this.logger.warn(`Redis GET error for key ${key}: ${error.message}`);
-      return null;
     }
+
+    const entry = this.memoryFallback.get(key);
+    if (entry) {
+      if (entry.expiresAt && Date.now() > entry.expiresAt) {
+        this.memoryFallback.delete(key);
+        return null;
+      }
+      return entry.value;
+    }
+    return null;
   }
 
   async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
+    const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : undefined;
+    this.memoryFallback.set(key, { value, expiresAt });
+
     try {
       if (!this.client || this.client.status !== 'ready') return;
       const stringValue = JSON.stringify(value);
@@ -65,6 +79,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async del(key: string): Promise<void> {
+    this.memoryFallback.delete(key);
     try {
       if (!this.client || this.client.status !== 'ready') return;
       await this.client.del(key);
@@ -74,6 +89,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async flushAll(): Promise<void> {
+    this.memoryFallback.clear();
     try {
       if (!this.client || this.client.status !== 'ready') return;
       await this.client.flushdb();

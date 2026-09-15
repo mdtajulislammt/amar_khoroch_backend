@@ -14,14 +14,47 @@ export class AuthController {
   @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'User Registration', description: 'Register a new user account and initialize default settings, wallets, and categories.' })
-  @ApiResponse({ status: 201, description: 'Registration successful' })
+  @ApiOperation({ summary: 'User Registration', description: 'Register a new user account and dispatch email OTP verification code.' })
+  @ApiResponse({ status: 201, description: 'Registration initiated, verification required' })
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 409, description: 'User already exists' })
   async register(@Body() dto: RegisterDto) {
     const data = await this.authService.register(dto);
     return {
-      message: 'Registration successful',
+      message: data.message || 'Registration successful',
+      data,
+    };
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify Email OTP', description: 'Verifies the 6-digit OTP code sent to user email and returns token.' })
+  @ApiResponse({ status: 200, description: 'Email verified and session issued' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
+  async verifyEmail(@Body() body: { email: string; otp: string }) {
+    if (!body?.email || !body?.otp) {
+      throw new BadRequestException('ইমেইল ও ওটিপি কোড আবশ্যক');
+    }
+    const data = await this.authService.verifyEmailOtp(body.email, body.otp);
+    return {
+      message: data.message,
+      data,
+    };
+  }
+
+  @Public()
+  @Post('resend-verification-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend Email OTP', description: 'Generates and resends a fresh 6-digit OTP code to the user email.' })
+  @ApiResponse({ status: 200, description: 'Fresh OTP dispatched' })
+  async resendVerificationOtp(@Body() body: { email: string }) {
+    if (!body?.email) {
+      throw new BadRequestException('ইমেইল অ্যাড্রেস আবশ্যক');
+    }
+    const data = await this.authService.resendVerificationOtp(body.email);
+    return {
+      message: data.message,
       data,
     };
   }
