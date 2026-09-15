@@ -245,8 +245,11 @@ export class AdminController {
   @Public()
   @Get('announcements/public')
   @ApiOperation({ summary: 'Active Public Announcements', description: 'Fetch active banner notices for regular users.' })
-  async getPublicAnnouncements() {
-    const data = await this.adminService.getActivePublicAnnouncements();
+  async getPublicAnnouncements(
+    @Query('userId') userId?: string,
+    @Query('email') email?: string,
+  ) {
+    const data = await this.adminService.getActivePublicAnnouncements(userId, email);
     return {
       message: 'Active announcements retrieved successfully',
       data,

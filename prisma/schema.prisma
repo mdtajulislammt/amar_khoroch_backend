@@ -288,16 +288,21 @@ enum AnnouncementType {
 }
 
 model SystemAnnouncement {
-  id          String           @id @default(uuid())
-  title       String           @map("title")
-  message     String           @map("message")
-  type        AnnouncementType @default(INFO)
-  isActive    Boolean          @default(true) @map("is_active")
-  startsAt    DateTime         @default(now()) @map("starts_at")
-  expiresAt   DateTime?        @map("expires_at")
-  createdById String           @map("created_by_id")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  id           String           @id @default(uuid())
+  title        String           @map("title")
+  message      String           @map("message")
+  type         AnnouncementType @default(INFO)
+  isActive     Boolean          @default(true) @map("is_active")
+  targetType   String           @default("ALL") @map("target_type")
+  targetUserId String?          @map("target_user_id")
+  targetEmail  String?          @map("target_email")
+  targetUserIds String[]        @default([]) @map("target_user_ids")
+  targetEmails  String[]        @default([]) @map("target_emails")
+  startsAt     DateTime         @default(now()) @map("starts_at")
+  expiresAt    DateTime?        @map("expires_at")
+  createdById  String           @map("created_by_id")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
 
   @@map("system_announcements")
 }

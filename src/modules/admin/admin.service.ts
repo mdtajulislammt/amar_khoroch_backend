@@ -376,24 +376,76 @@ export class AdminService {
     });
   }
 
-  async getActivePublicAnnouncements() {
+  async getActivePublicAnnouncements(userId?: string, email?: string) {
     const now = new Date();
+
+    const audienceConditions: any[] = [
+      { targetType: 'ALL' },
+    ];
+
+    if (userId) {
+      audienceConditions.push({ targetUserId: userId });
+      audienceConditions.push({ targetUserIds: { has: userId } });
+    }
+    if (email) {
+      const cleanEmail = email.trim().toLowerCase();
+      audienceConditions.push({ targetEmail: { equals: cleanEmail, mode: 'insensitive' } });
+      audienceConditions.push({ targetEmails: { has: cleanEmail } });
+    }
+
     return this.prisma.systemAnnouncement.findMany({
       where: {
         isActive: true,
         startsAt: { lte: now },
-        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+        AND: [
+          {
+            OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+          },
+          {
+            OR: audienceConditions,
+          },
+        ],
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async createAnnouncement(adminId: string, dto: CreateAnnouncementDto) {
+    let targetUserId = dto.targetUserId?.trim() || null;
+    let targetEmail = dto.targetEmail?.trim()?.toLowerCase() || null;
+    const targetType = dto.targetType || 'ALL';
+
+    const targetUserIds = Array.isArray(dto.targetUserIds)
+      ? dto.targetUserIds.map(id => String(id).trim()).filter(Boolean)
+      : [];
+    const targetEmails = Array.isArray(dto.targetEmails)
+      ? dto.targetEmails.map(e => String(e).trim().toLowerCase()).filter(Boolean)
+      : [];
+
+    if (targetUserId && !targetUserIds.includes(targetUserId)) {
+      targetUserIds.push(targetUserId);
+    }
+    if (targetEmail && !targetEmails.includes(targetEmail)) {
+      targetEmails.push(targetEmail);
+    }
+
+    if (!targetUserId && targetUserIds.length > 0) {
+      targetUserId = targetUserIds[0];
+    }
+    if (!targetEmail && targetEmails.length > 0) {
+      targetEmail = targetEmails[0];
+    }
+
     const announcement = await this.prisma.systemAnnouncement.create({
       data: {
         title: dto.title,
         message: dto.message,
         type: dto.type || 'INFO',
+        targetType,
+        targetUserId,
+        targetEmail,
+        targetUserIds,
+        targetEmails,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
         createdById: adminId,
       },
@@ -401,6 +453,9 @@ export class AdminService {
 
     await this.logAdminAction(adminId, 'CREATE_ANNOUNCEMENT', announcement.id, 'ANNOUNCEMENT', {
       title: announcement.title,
+      targetType,
+      targetEmail,
+      userCount: targetEmails.length || (targetType === 'ALL' ? 'ALL' : 1),
     });
 
     return announcement;
