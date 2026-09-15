@@ -73,6 +73,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async flushAll(): Promise<void> {
+    try {
+      if (!this.client || this.client.status !== 'ready') return;
+      await this.client.flushdb();
+    } catch (error: any) {
+      this.logger.warn(`Redis flushdb error: ${error.message}`);
+    }
+  }
+
   async invalidateUserCache(userId: string): Promise<void> {
     try {
       if (!this.client || this.client.status !== 'ready') return;

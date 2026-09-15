@@ -1,8 +1,10 @@
+import { Role } from '@prisma/client';
 import {
   Injectable,
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -97,7 +99,7 @@ export class AuthService {
           passwordHash,
           phone: dto.phone || null,
           currency: dto.currency || 'BDT (৳)',
-          role: 'Pro Member',
+          role: 'USER',
         },
       });
 
@@ -136,6 +138,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+
+
     const token = this.jwtService.sign({ sub: user.id, email: user.email });
 
     return {
@@ -171,7 +175,7 @@ export class AuthService {
             email,
             passwordHash: randomPasswordHash,
             avatar: dto.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
-            role: 'Pro Member',
+            role: 'USER',
           },
         });
 
@@ -242,7 +246,7 @@ export class AuthService {
       data: {
         ...(dto.name && { name: dto.name }),
         ...(dto.phone !== undefined && { phone: dto.phone }),
-        ...(dto.role && { role: dto.role }),
+        
         ...(dto.avatar !== undefined && { avatar: dto.avatar }),
         ...(dto.currency && { currency: dto.currency }),
         ...(dto.bio !== undefined && { bio: dto.bio }),

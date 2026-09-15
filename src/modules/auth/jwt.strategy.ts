@@ -1,8 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../../database/prisma.service';
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { PassportStrategy } from "@nestjs/passport";
+import { ExtractJwt, Strategy } from "passport-jwt";
+import { ConfigService } from "@nestjs/config";
+import { PrismaService } from "../../database/prisma.service";
 
 export interface JwtPayload {
   sub: string;
@@ -18,7 +18,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET', 'super-secret-amar-khoroch-jwt-key-2026-production'),
+      secretOrKey: configService.get<string>("JWT_SECRET", "super-secret-amar-khoroch-jwt-key-2026-production"),
     });
   }
 
@@ -31,6 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         email: true,
         phone: true,
         role: true,
+        status: true,
         avatar: true,
         currency: true,
         bio: true,
@@ -39,7 +40,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
 
     if (!user) {
-      throw new UnauthorizedException('User not found or token invalid');
+      throw new UnauthorizedException("User not found or token invalid");
+    }
+
+    if (user.status === "BANNED" || user.status === "SUSPENDED") {
+      throw new UnauthorizedException("Your account has been suspended or banned. Please contact the administrator.");
     }
 
     return user;

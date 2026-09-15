@@ -1,3 +1,5 @@
+import { ScheduleModule } from '@nestjs/schedule';
+import { AdminModule } from './modules/admin/admin.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -37,6 +39,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     DebtsModule,
     NotesModule,
     ReportsModule,
+    ScheduleModule.forRoot(),
+    AdminModule,
   ],
   providers: [
     {
