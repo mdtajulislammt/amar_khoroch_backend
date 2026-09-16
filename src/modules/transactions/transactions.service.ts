@@ -308,29 +308,45 @@ export class TransactionsService {
       }
 
       // Revert wallet balances
-      if (transaction.type === TransactionType.INCOME) {
-        await tx.wallet.update({
-          where: { id: transaction.walletId },
-          data: { balance: { decrement: transaction.amount } },
-        });
-      } else if (transaction.type === TransactionType.EXPENSE) {
-        await tx.wallet.update({
-          where: { id: transaction.walletId },
-          data: { balance: { increment: transaction.amount } },
-        });
-      } else if (transaction.type === TransactionType.TRANSFER && transaction.toWalletId) {
-        await tx.wallet.update({
-          where: { id: transaction.walletId },
-          data: { balance: { increment: transaction.amount } },
-        });
-        await tx.wallet.update({
-          where: { id: transaction.toWalletId },
-          data: { balance: { decrement: transaction.amount } },
-        });
+      if (transaction.type === TransactionType.INCOME && transaction.walletId) {
+        const wallet = await tx.wallet.findUnique({ where: { id: transaction.walletId } });
+        if (wallet) {
+          await tx.wallet.update({
+            where: { id: transaction.walletId },
+            data: { balance: { decrement: transaction.amount } },
+          });
+        }
+      } else if (transaction.type === TransactionType.EXPENSE && transaction.walletId) {
+        const wallet = await tx.wallet.findUnique({ where: { id: transaction.walletId } });
+        if (wallet) {
+          await tx.wallet.update({
+            where: { id: transaction.walletId },
+            data: { balance: { increment: transaction.amount } },
+          });
+        }
+      } else if (transaction.type === TransactionType.TRANSFER) {
+        if (transaction.walletId) {
+          const wallet = await tx.wallet.findUnique({ where: { id: transaction.walletId } });
+          if (wallet) {
+            await tx.wallet.update({
+              where: { id: transaction.walletId },
+              data: { balance: { increment: transaction.amount } },
+            });
+          }
+        }
+        if (transaction.toWalletId) {
+          const toWallet = await tx.wallet.findUnique({ where: { id: transaction.toWalletId } });
+          if (toWallet) {
+            await tx.wallet.update({
+              where: { id: transaction.toWalletId },
+              data: { balance: { decrement: transaction.amount } },
+            });
+          }
+        }
       }
 
       // Sync with parent Debts when deleting a transaction
-      if (transaction.note.startsWith('[DEBT_INIT:')) {
+      if (transaction.note && transaction.note.startsWith('[DEBT_INIT:')) {
         const endBracketIdx = transaction.note.indexOf(']');
         if (endBracketIdx !== -1) {
           const debtId = transaction.note.substring(11, endBracketIdx);
@@ -352,7 +368,7 @@ export class TransactionsService {
             });
           }
         }
-      } else if (transaction.note.startsWith('[DEBT_CLEAR:')) {
+      } else if (transaction.note && transaction.note.startsWith('[DEBT_CLEAR:')) {
         const endBracketIdx = transaction.note.indexOf(']');
         if (endBracketIdx !== -1) {
           const debtId = transaction.note.substring(12, endBracketIdx);
