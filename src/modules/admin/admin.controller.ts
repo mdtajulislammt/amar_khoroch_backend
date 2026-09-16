@@ -26,6 +26,7 @@ import { AdminUserQueryDto } from './dto/admin-query.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
+import { RequestAdminPasswordOtpDto, ConfirmAdminPasswordChangeDto } from './dto/admin-change-password.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -55,6 +56,51 @@ export class AdminController {
       data,
     };
   }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('auth/change-password/request-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Request Admin Password Change OTP',
+    description: 'Verifies current admin password and dispatches a 6-digit OTP code to the admin email.',
+  })
+  @ApiResponse({ status: 200, description: 'OTP dispatched successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid current password' })
+  async requestPasswordChangeOtp(
+    @CurrentUser('id') adminId: string,
+    @Body() dto: RequestAdminPasswordOtpDto,
+  ) {
+    const data = await this.adminService.requestPasswordChangeOtp(adminId, dto);
+    return {
+      message: data.message,
+      data,
+    };
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @Post('auth/change-password/confirm')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Confirm Admin Password Change',
+    description: 'Validates 6-digit email OTP and updates the admin password.',
+  })
+  @ApiResponse({ status: 200, description: 'Password updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP / password mismatch' })
+  async confirmPasswordChange(
+    @CurrentUser('id') adminId: string,
+    @Body() dto: ConfirmAdminPasswordChangeDto,
+  ) {
+    const data = await this.adminService.confirmPasswordChange(adminId, dto);
+    return {
+      message: data.message,
+      data,
+    };
+  }
+
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)

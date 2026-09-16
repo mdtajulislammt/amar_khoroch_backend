@@ -110,4 +110,68 @@ export class AuthMailService {
       return false;
     }
   }
+
+  async sendAdminPasswordChangeOtpEmail(recipientEmail: string, adminName: string, otp: string): Promise<boolean> {
+    try {
+      const transporter = this.getTransporter();
+      const env = this.parseEnvFile();
+      const fromAddress = env.MAIL_FROM_ADDRESS || env.MAIL_USERNAME || "dev.tajulislam505@gmail.com";
+
+      if (!transporter) {
+        this.logger.warn(`[ADMIN OTP DEMO FALLBACK] Admin password change code for ${recipientEmail} is ${otp}`);
+        return true;
+      }
+
+      const mailOptions = {
+        from: `"E-Khoroch Admin Vault" <${fromAddress}>`,
+        to: recipientEmail,
+        subject: `[${otp}] অ্যাডমিন পাসওয়ার্ড পরিবর্তন সিকিউরিটি কোড - E-Khoroch`,
+        html: `
+          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 520px; margin: 0 auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff; color: #0f172a;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <div style="display: inline-block; padding: 6px 14px; background: #e0e7ff; color: #4338ca; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                🛡️ ADMIN SECURITY VAULT
+              </div>
+              <h2 style="color: #1e1b4b; font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">E-Khoroch (ই-খরচ)</h2>
+              <p style="color: #64748b; font-size: 13px; margin-top: 4px;">সুপার অ্যাডমিন / অ্যাডমিনিস্ট্রেটর সিকিউরিটি গেটওয়ে</p>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+              <p style="font-size: 15px; margin: 0 0 12px 0; color: #0f172a;">
+                সম্মানিত অ্যাডমিনিস্ট্রেটর <strong>${adminName || "Admin"}</strong>,
+              </p>
+              <p style="font-size: 13px; color: #334155; line-height: 1.6; margin: 0;">
+                আপনার <strong>E-Khoroch</strong> অ্যাডমিন অ্যাকাউন্টের পাসওয়ার্ড পরিবর্তন করার একটি অনুরোধ পাওয়া গেছে। পাসওয়ার্ড আপডেট সম্পন্ন করতে নিচের <strong>৬-সংখ্যার নিরাপত্তা ভেরিফিকেশন কোডটি (OTP)</strong> ব্যবহার করুন:
+              </p>
+
+              <div style="text-align: center; margin: 24px 0;">
+                <div style="display: inline-block; background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); color: #ffffff; font-size: 34px; font-weight: 800; letter-spacing: 8px; padding: 14px 28px; border-radius: 12px; box-shadow: 0 4px 14px rgba(67, 56, 202, 0.35);">
+                  ${otp}
+                </div>
+              </div>
+
+              <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; margin-top: 16px;">
+                <p style="font-size: 12px; color: #991b1b; margin: 0; line-height: 1.5;">
+                  ⚠️ <strong>জরুরি সতর্কতা:</strong> এই কোডটির মেয়াদ <strong>১০ মিনিট</strong>। আপনি যদি পাসওয়ার্ড পরিবর্তনের এই অনুরোধটি না করে থাকেন, তাহলে অবিলম্বে সিস্টেম নিরাপত্তা খতিয়ে দেখুন।
+                </p>
+              </div>
+            </div>
+
+            <div style="border-top: 1px solid #f1f5f9; padding-top: 16px; font-size: 11px; color: #94a3b8; text-align: center;">
+              <p style="margin: 0 0 4px 0;">এই ইমেইলটি E-Khoroch অ্যাডমিন কমান্ড সেন্টার থেকে স্বয়ংক্রিয়ভাবে প্রেরিত।</p>
+              <p style="margin: 0;">প্রাপক: <strong>${recipientEmail}</strong></p>
+            </div>
+          </div>
+        `,
+      };
+
+      await transporter.sendMail(mailOptions);
+      this.logger.log(`Admin password change OTP email dispatched successfully to ${recipientEmail}`);
+      return true;
+    } catch (err: any) {
+      this.logger.error(`Failed to dispatch admin password change OTP to ${recipientEmail}: ${err.message}`);
+      return false;
+    }
+  }
 }
+

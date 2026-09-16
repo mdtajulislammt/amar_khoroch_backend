@@ -13,6 +13,8 @@ import * as bcrypt from 'bcryptjs';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { AdminUserQueryDto } from './dto/admin-query.dto';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
+import { RequestAdminPasswordOtpDto, ConfirmAdminPasswordChangeDto } from './dto/admin-change-password.dto';
+import { AuthMailService } from '../auth/mail.service';
 
 @Injectable()
 export class AdminService {
@@ -20,6 +22,7 @@ export class AdminService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private redisService: RedisService,
+    private mailService: AuthMailService,
   ) {}
 
   /**
@@ -67,6 +70,103 @@ export class AdminService {
       },
     };
   }
+
+  /**
+   * Request Admin Password Change Email OTP
+   */
+  async requestPasswordChangeOtp(adminId: string, dto: RequestAdminPasswordOtpDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: adminId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Admin account not found');
+    }
+
+    if (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN) {
+      throw new ForbiddenException('Administrator privileges required');
+    }
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!isMatch) {
+      throw new BadRequestException('বর্তমান পাসওয়ার্ডটি সঠিক নয়। অনুগ্রহ করে সঠিক পাসওয়ার্ড দিন।');
+    }
+
+    // Generate secure 6-digit numeric OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const redisKey = `admin:password-change-otp:${adminId}`;
+
+    // Store in Redis with 10-minute expiry (600s)
+    await this.redisService.set(redisKey, otp, 600);
+
+    // Dispatch Security Email
+    await this.mailService.sendAdminPasswordChangeOtpEmail(user.email, user.name, otp);
+
+    const [localPart, domain] = (user.email || '').split('@');
+    const maskedLocal =
+      localPart && localPart.length > 2
+        ? `${localPart[0]}***${localPart[localPart.length - 1]}`
+        : `${localPart || 'a'}***`;
+    const emailMasked = `${maskedLocal}@${domain || 'mail.com'}`;
+
+    return {
+      success: true,
+      message: `আপনার রেজিস্টার্ড ইমেইল (${emailMasked}) এ ৬-সংখ্যার ভেরিফিকেশন কোড পাঠানো হয়েছে।`,
+      emailMasked,
+    };
+  }
+
+  /**
+   * Confirm Admin Password Change with Email OTP
+   */
+  async confirmPasswordChange(adminId: string, dto: ConfirmAdminPasswordChangeDto) {
+    const redisKey = `admin:password-change-otp:${adminId}`;
+    const storedOtp = await this.redisService.get<string>(redisKey);
+
+    if (!storedOtp || String(storedOtp).trim() !== String(dto.otp).trim()) {
+      throw new BadRequestException('ভেরিফিকেশন ওটিপি (OTP) সঠিক নয় অথবা কোডের মেয়াদ শেষ হয়ে গেছে।');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: adminId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Admin account not found');
+    }
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!isMatch) {
+      throw new BadRequestException('বর্তমান পাসওয়ার্ডটি সঠিক নয়।');
+    }
+
+    const isSamePassword = await bcrypt.compare(dto.newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw new BadRequestException('নতুন পাসওয়ার্ডটি বর্তমান পাসওয়ার্ডের সাথে হুবহু এক হতে পারবে না।');
+    }
+
+    const newPasswordHash = await bcrypt.hash(dto.newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: adminId },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    // Invalidate Redis OTP
+    await this.redisService.del(redisKey);
+
+    // Record Security Audit
+    await this.logAdminAction(adminId, 'ADMIN_PASSWORD_CHANGED', adminId, 'USER', {
+      email: user.email,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
+      success: true,
+      message: 'অ্যাডমিন পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।',
+    };
+  }
+
 
   /**
    * Overview Metrics / KPIs for the Admin Command Center
