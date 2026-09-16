@@ -28,14 +28,14 @@ export class AuthService {
     private mailService: AuthMailService,
   ) {}
 
-  private async initializeUserDefaults(tx: any, userId: string) {
-    // Default Wallets
+  private async initializeUserDefaults(tx: any, userId: string, isDemo: boolean = false) {
+    // Default Wallets (Normal users start with 0 balance; only demo account gets sample balances)
     const defaultWallet = await tx.wallet.create({
       data: {
         userId,
         name: 'Cash Wallet',
         type: 'CASH',
-        balance: 5000,
+        balance: isDemo ? 5000 : 0,
         icon: 'Wallet',
       },
     });
@@ -46,14 +46,14 @@ export class AuthService {
           userId,
           name: 'Bank Account',
           type: 'BANK',
-          balance: 25000,
+          balance: isDemo ? 25000 : 0,
           icon: 'Landmark',
         },
         {
           userId,
           name: 'bKash',
           type: 'MOBILE_BANKING',
-          balance: 3500,
+          balance: isDemo ? 3500 : 0,
           icon: 'Smartphone',
         },
       ],
@@ -108,7 +108,7 @@ export class AuthService {
           },
         });
 
-        const defaultWallet = await this.initializeUserDefaults(tx, newUser.id);
+        const defaultWallet = await this.initializeUserDefaults(tx, newUser.id, true);
 
         // Add sample demo transactions
         const catSalary = await tx.category.findFirst({
@@ -148,11 +148,58 @@ export class AuthService {
 
         return newUser;
       });
-    } else if (!user.isEmailVerified) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { isEmailVerified: true },
+    } else {
+      if (!user.isEmailVerified) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { isEmailVerified: true },
+        });
+      }
+
+      // Ensure demo account has sample demo transactions and balances
+      const defaultWallet = await this.prisma.wallet.findFirst({
+        where: { userId: user.id, type: 'CASH' },
       });
+      const txCount = await this.prisma.transaction.count({
+        where: { userId: user.id },
+      });
+
+      if (txCount === 0 && defaultWallet) {
+        const catSalary = await this.prisma.category.findFirst({
+          where: { userId: user.id, name: 'Salary & Income' },
+        });
+        const catFood = await this.prisma.category.findFirst({
+          where: { userId: user.id, name: 'Food & Dining' },
+        });
+
+        if (catSalary) {
+          await this.prisma.transaction.create({
+            data: {
+              userId: user.id,
+              walletId: defaultWallet.id,
+              categoryId: catSalary.id,
+              type: 'INCOME',
+              amount: 45000,
+              date: new Date().toISOString().split('T')[0],
+              note: 'Monthly Demo Salary',
+            },
+          });
+        }
+
+        if (catFood) {
+          await this.prisma.transaction.create({
+            data: {
+              userId: user.id,
+              walletId: defaultWallet.id,
+              categoryId: catFood.id,
+              type: 'EXPENSE',
+              amount: 1250,
+              date: new Date().toISOString().split('T')[0],
+              note: 'Weekly Grocery Shopping',
+            },
+          });
+        }
+      }
     }
 
     const token = this.jwtService.sign({ sub: user.id, email: user.email });

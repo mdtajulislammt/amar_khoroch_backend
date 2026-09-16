@@ -377,6 +377,30 @@ export class AdminService {
   }
 
   async getActivePublicAnnouncements(userId?: string, email?: string) {
+    const cleanEmail = email?.trim()?.toLowerCase();
+
+    // Do not show announcements on demo account
+    if (cleanEmail === 'tajul.islam@example.com' || cleanEmail?.includes('demo')) {
+      return [];
+    }
+
+    // Do not show announcements on admin accounts
+    if (userId || cleanEmail) {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          OR: [
+            ...(userId ? [{ id: userId }] : []),
+            ...(cleanEmail ? [{ email: cleanEmail }] : []),
+          ],
+        },
+        select: { role: true, email: true },
+      });
+
+      if (user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.email === 'tajul.islam@example.com')) {
+        return [];
+      }
+    }
+
     const now = new Date();
 
     const audienceConditions: any[] = [
