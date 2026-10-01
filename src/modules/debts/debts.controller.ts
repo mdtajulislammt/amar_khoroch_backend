@@ -12,7 +12,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard)
 export class DebtsController {
   constructor(private readonly debtsService: DebtsService) {}
-
+// get single
   @Get()
   @ApiOperation({ summary: 'Get All Debts', description: 'Retrieve all receivables and payables tracked by the user.' })
   @ApiResponse({ status: 200, description: 'Debts retrieved successfully' })
